@@ -58,6 +58,7 @@ typedef struct {
     char baseuri[PATH_MAX];
     int minzoom;
     int maxzoom;
+    bool levels;
 } tile_config_rec;
 
 typedef struct {

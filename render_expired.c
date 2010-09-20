@@ -145,14 +145,13 @@ int process_loop(int fd, const char *mapname, int x, int y, int z)
 
 void process(int fd, const char *name)
 {
-    char xmlconfig[XMLCONFIG_MAX];
-    int x, y, z;
+    struct protocol tile;
 
-    if (path_to_xyz(name, xmlconfig, &x, &y, &z))
+    if (path_to_xyz(name, &tile))
         return;
 
-    printf("Requesting xml(%s) x(%d) y(%d) z(%d)\n", xmlconfig, x, y, z);
-    process_loop(fd, xmlconfig, x, y, z);
+    printf("Requesting xml(%s) x(%d) y(%d) z(%d)\n", tile.xmlname, tile.x, tile.y, tile.z);
+    process_loop(fd, tile.xmlname, tile.x, tile.y, tile.z);
 }
 
 #define QMAX 32
@@ -322,9 +321,7 @@ void finish_workers(int num)
 int main(int argc, char **argv)
 {
     char *spath = RENDER_SOCKET;
-    char *mapname = XMLCONFIG_DEFAULT;
     char *tile_dir = HASH_PATH;
-    int x, y, z;
     char name[PATH_MAX];
     struct timeval start, end;
     int num_render = 0, num_all = 0, num_read = 0, num_ignore = 0, num_unlink = 0, num_touch = 0;
@@ -335,6 +332,11 @@ int main(int argc, char **argv)
     int touchFrom = -1;
     int doRender = 0;
     int i;
+
+    struct protocol tile;
+    strcpy(tile.xmlname, XMLCONFIG_DEFAULT);
+    tile.level = NO_LEVELS;
+
 
     // Initialize touchFrom timestamp
     struct utimbuf touchTime;
@@ -399,7 +401,7 @@ int main(int argc, char **argv)
                 tile_dir=strdup(optarg);
                 break;
             case 'm':   /* -m, --map */
-                mapname=strdup(optarg);
+                strcpy(tile.xmlname, optarg);
                 break;
             case 'n':   /* -n, --num-threads */
                 numThreads=atoi(optarg);
@@ -486,9 +488,9 @@ int main(int argc, char **argv)
     while(!feof(stdin)) 
     {
         struct stat s;
-        int n = fscanf(stdin, "%d/%d/%d", &z, &x, &y);
+        int n = fscanf(stdin, "%d/%d/%d", &tile.z, &tile.x, &tile.y);
 
-        printf("read: x=%d y=%d z=%d\n", x, y, z);
+        printf("read: x=%d y=%d z=%d\n", tile.x, tile.y, tile.z);
         if (n != 3) {
             // Discard input line
             char tmp[1024];
@@ -499,26 +501,26 @@ int main(int argc, char **argv)
             continue;
         }
 
-        while (z > maxZoom)
+        while (tile.z > maxZoom)
         {
-            x>>=1; y>>=1; z--;
+            tile.x>>=1; tile.y>>=1; tile.z--;
         }
-        while (z < maxZoom)
+        while (tile.z < maxZoom)
         {
-            x<<=1; y<<=1; z++;
+            tile.x<<=1; tile.y<<=1; tile.z++;
         }
         //printf("loop: x=%d y=%d z=%d up to z=%d\n", x, y, z, minZoom);
         num_read++;
 
-        for (; z>= minZoom; z--, x>>=1, y>>=1)
+        for (; tile.z>= minZoom; tile.z--, tile.x>>=1, tile.y>>=1)
         {
-            printf("process: x=%d y=%d z=%d\n", x, y, z);
+            printf("process: x=%d y=%d z=%d\n", tile.x, tile.y, tile.z);
 
             // don't do anything if this tile was already requested.
             // renderd does keep a list internally to avoid enqueing the same tile
             // twice but in case it has already rendered the tile we don't want to
             // cause extra work.
-            if (TILE_REQUESTED(z - excess_zoomlevels,x>>excess_zoomlevels,y>>excess_zoomlevels)) 
+            if (TILE_REQUESTED(tile.z - excess_zoomlevels,tile.x>>excess_zoomlevels,tile.y>>excess_zoomlevels)) 
             { 
                 printf("already requested\n"); 
                 break; 
@@ -527,25 +529,25 @@ int main(int argc, char **argv)
             // mark tile as requested. (do this even if, below, the tile is not 
             // actually requested due to not being present on disk, to avoid 
             // unnecessary later stat'ing).
-            SET_TILE_REQUESTED(z - excess_zoomlevels,x>>excess_zoomlevels,y>>excess_zoomlevels); 
+            SET_TILE_REQUESTED(tile.z - excess_zoomlevels,tile.x>>excess_zoomlevels,tile.y>>excess_zoomlevels); 
 
             // commented out - seems to cause problems in MT environment, 
             // trying to write to already-closed file
             //check_load();
 
             num_all++;
-            xyz_to_meta(name, sizeof(name), tile_dir, mapname, x, y, z);
+            xyz_to_meta(name, sizeof(name), tile_dir, &tile);
 
             if (stat(name, &s) == 0) // 0 is success
             {
                 // tile exists on disk; render it
-                if (deleteFrom != -1 && z >= deleteFrom)
+                if (deleteFrom != -1 && tile.z >= deleteFrom)
                 {
                     printf("unlink: %s\n", name);
                     unlink(name);
                     num_unlink++;
                 }
-                else if (touchFrom != -1 && z >= touchFrom)
+                else if (touchFrom != -1 && tile.z >= touchFrom)
                 {
                     printf("touch: %s\n", name);
                     utime(name, &touchTime);

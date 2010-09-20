@@ -142,6 +142,7 @@ int request_tile(request_rec *r, struct protocol *cmd, int renderImmediately)
     case 2: { cmd->cmd = cmdRenderPrio; break;}
     }
 
+    // maybe TODO: add level
     ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r, "Requesting xml(%s) z(%d) x(%d) y(%d)", cmd->xmlname, cmd->z, cmd->x, cmd->y);
     do {
         ret = send(fd, cmd, sizeof(struct protocol), 0);
@@ -175,13 +176,14 @@ int request_tile(request_rec *r, struct protocol *cmd, int renderImmediately)
                     break;
                 }
 
-                if (cmd->x == resp.x && cmd->y == resp.y && cmd->z == resp.z && !strcmp(cmd->xmlname, resp.xmlname)) {
+                if (cmd->x == resp.x && cmd->y == resp.y && cmd->z == resp.z && !strcmp(cmd->xmlname, resp.xmlname) && cmd->level == resp.level) {
                     close(fd);
                     if (resp.cmd == cmdDone)
                         return 1;
                     else
                         return 0;
                 } else {
+                    // maybe TODO: add level
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
                        "Response does not match request: xml(%s,%s) z(%d,%d) x(%d,%d) y(%d,%d)", cmd->xmlname,
                        resp.xmlname, cmd->z, resp.z, cmd->x, resp.x, cmd->y, resp.y);
@@ -258,14 +260,15 @@ static enum tileState tile_state(request_rec *r, struct protocol *cmd)
 
         // Try fallback to plain PNG
         char path[PATH_MAX];
-        xyz_to_path(path, sizeof(path), scfg->tile_dir, cmd->xmlname, cmd->x, cmd->y, cmd->z);
+        xyz_to_path(path, sizeof(path), scfg->tile_dir, cmd);
         r->filename = apr_pstrdup(r->pool, path);
         state = tile_state_once(r);
-        ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r, "png fallback %d/%d/%d",x,y,z);
+        // maybe TODO: add level
+        ap_log_rerror(APLOG_MARK, APLOG_INFO, 0, r, "png fallback %d/%d/%d",cms->x,cmd->y,cmd->z);
 
         if (state == tileMissing) {
             // PNG not available either, if it gets rendered, it'll now be a .meta
-            xyz_to_meta(path, sizeof(path), scfg->tile_dir, cmd->xmlname, cmd->x, cmd->y, cmd->z);
+            xyz_to_meta(path, sizeof(path), scfg->tile_dir, cmd);
             r->filename = apr_pstrdup(r->pool, path);
         }
     }
@@ -815,7 +818,7 @@ static int tile_handler_serve(request_rec *r)
         return HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    len = tile_read(cmd->xmlname, cmd->x, cmd->y, cmd->z, buf, tile_max);
+    len = tile_read(cmd, buf, tile_max);
     if (len > 0) {
 #if 0
         // Set default Last-Modified and Etag headers
@@ -893,8 +896,16 @@ static int tile_translate(request_rec *r)
             struct protocol * cmd = (struct protocol *) apr_pcalloc(r->pool, sizeof(struct protocol));
             bzero(cmd, sizeof(struct protocol));
 
-            n = sscanf(r->uri+strlen(tile_config->baseuri), "%d/%d/%d.png/%10s", &(cmd->z), &(cmd->x), &(cmd->y), option);
-            if (n < 3) return DECLINED;
+            if ( !tile_config->levels ) {
+                n = sscanf(r->uri+strlen(tile_config->baseuri), "%d/%d/%d.png/%10s", &(cmd->z), &(cmd->x), &(cmd->y), option);
+                if (n < 3) return DECLINED;
+                cmd->level = NO_LEVELS;
+            }
+            else {
+                n = sscanf(r->uri+strlen(tile_config->baseuri), "%d/%d/%d.%d.png/%10s", &(cmd->z), &(cmd->x), &(cmd->y), &(cmd->level), option);
+                if (n < 4) return DECLINED;
+            }
+
 
             oob = (cmd->z < 0 || cmd->z > MAX_ZOOM);
             if (!oob) {
@@ -918,9 +929,9 @@ static int tile_translate(request_rec *r)
             // Generate the tile filename?
             char abs_path[PATH_MAX];
 #ifdef METATILE
-            xyz_to_meta(abs_path, sizeof(abs_path), scfg->tile_dir, cmd->xmlname, cmd->x, cmd->y, cmd->z);
+            xyz_to_meta(abs_path, sizeof(abs_path), scfg->tile_dir, cmd);
 #else
-            xyz_to_path(abs_path, sizeof(abs_path), scfg->tile_dir, cmd->xmlname, cmd->x, cmd->y, cmd->z);
+            xyz_to_path(abs_path, sizeof(abs_path), scfg->tile_dir, cmd);
 #endif
             r->filename = apr_pstrdup(r->pool, abs_path);
 

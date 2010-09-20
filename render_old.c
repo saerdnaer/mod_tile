@@ -147,14 +147,13 @@ int process_loop(int fd, char * xmlname, int x, int y, int z)
 
 void process(int fd, const char *name)
 {
-    char xmlconfig[XMLCONFIG_MAX];
-    int x, y, z;
+	struct protocol tile;
 
-    if (path_to_xyz(name, xmlconfig, &x, &y, &z))
+    if (path_to_xyz(name, &tile))
         return;
 
-    printf("Requesting xml(%s) x(%d) y(%d) z(%d)\n", xmlconfig, x, y, z);
-    process_loop(fd, xmlconfig, x, y, z);
+    printf("Requesting xml(%s) x(%d) y(%d) z(%d)\n", tile.xmlname, tile.x, tile.y, tile.z);
+    process_loop(fd, tile.xmlname, tile.x, tile.y, tile.z);
 }
 
 static void check_load(void)

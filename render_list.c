@@ -140,14 +140,13 @@ int process_loop(int fd, const char *mapname, int x, int y, int z)
 
 void process(int fd, const char *name)
 {
-    char xmlconfig[XMLCONFIG_MAX];
-    int x, y, z;
+    struct protocol tile;
 
-    if (path_to_xyz(name, xmlconfig, &x, &y, &z))
+    if (path_to_xyz(name, &tile))
         return;
 
-    printf("Requesting xml(%s) x(%d) y(%d) z(%d)\n", xmlconfig, x, y, z);
-    process_loop(fd, xmlconfig, x, y, z);
+    printf("Requesting xml(%s) x(%d) y(%d) z(%d)\n", tile.xmlname, tile.x, tile.y, tile.z );
+    process_loop(fd, tile.xmlname, tile.x, tile.y, tile.z);
 }
 
 static void check_load(void)
@@ -327,10 +326,8 @@ void finish_workers(int num)
 int main(int argc, char **argv)
 {
     char *spath = RENDER_SOCKET;
-    char *mapname = XMLCONFIG_DEFAULT;
     char *tile_dir = HASH_PATH;
     int minX=-1, maxX=-1, minY=-1, maxY=-1;
-    int x, y, z;
     char name[PATH_MAX];
     struct timeval start, end;
     int num_render = 0, num_all = 0;
@@ -339,6 +336,10 @@ int main(int argc, char **argv)
     int all=0;
     int numThreads = 1;
     int force=0;
+
+    struct protocol tile;
+    strcpy(tile.xmlname, XMLCONFIG_DEFAULT);
+    tile.level = NO_LEVELS;
 
     while (1) {
         int option_index = 0;
@@ -376,7 +377,7 @@ int main(int argc, char **argv)
                 tile_dir=strdup(optarg);
                 break;
             case 'm':   /* -m, --map */
-                mapname=strdup(optarg);
+                strcpy(tile.xmlname, optarg);
                 break;
             case 'l':   /* -l, --max-load */
                 maxLoad = atoi(optarg);
@@ -492,16 +493,15 @@ int main(int argc, char **argv)
     spawn_workers(numThreads, spath);
 
     if (all) {
-        int x, y, z;
         printf("Rendering all tiles from zoom %d to zoom %d\n", minZoom, maxZoom);
-        for (z=minZoom; z <= maxZoom; z++) {
-            int current_maxX = (maxX == -1) ? (1 << z)-1 : maxX;
-            int current_maxY = (maxY == -1) ? (1 << z)-1 : maxY;
-            printf("Rendering all tiles for zoom %d from (%d, %d) to (%d, %d)\n", z, minX, minY, current_maxX, current_maxY);
-            for (x=minX; x <= current_maxX; x+=METATILE) {
-                for (y=minY; y <= current_maxY; y+=METATILE) {
+        for (tile.z=minZoom; tile.z <= maxZoom; tile.z++) {
+            int current_maxX = (maxX == -1) ? (1 << tile.z)-1 : maxX;
+            int current_maxY = (maxY == -1) ? (1 << tile.z)-1 : maxY;
+            printf("Rendering all tiles for zoom %d from (%d, %d) to (%d, %d)\n", tile.z, minX, minY, current_maxX, current_maxY);
+            for (tile.x=minX; tile.x <= current_maxX; tile.x+=METATILE) {
+                for (tile.y=minY; tile.y <= current_maxY; tile.y+=METATILE) {
                     check_load();
-                    xyz_to_meta(name, sizeof(name), tile_dir, mapname, x, y, z);
+                    xyz_to_meta(name, sizeof(name), tile_dir, &tile);
                     enqueue(name);
                     //process_loop(fd, mapname, x, y, z);
                     num_all++;
@@ -512,7 +512,7 @@ int main(int argc, char **argv)
     } else {
         while(!feof(stdin)) {
             struct stat s;
-            int n = fscanf(stdin, "%d %d %d", &x, &y, &z);
+            int n = fscanf(stdin, "%d %d %d", &tile.x, &tile.y, &tile.z);
 
             if (n != 3) {
                 // Discard input line
@@ -524,16 +524,16 @@ int main(int argc, char **argv)
                 continue;
             }
 
-            if (z < minZoom || z > maxZoom)
+            if (tile.z < minZoom || tile.z > maxZoom)
                 continue;
 
 
-            printf("got: x(%d) y(%d) z(%d)\n", x, y, z);
+            printf("got: x(%d) y(%d) z(%d)\n", tile.x, tile.y, tile.z);
 
             check_load();
 
             num_all++;
-            xyz_to_meta(name, sizeof(name), tile_dir, mapname, x, y, z);
+            xyz_to_meta(name, sizeof(name), tile_dir, &tile);
 
             if (force || (stat(name, &s) < 0) || (planetTime > s.st_mtime)) {
                 // missing or old, render it
