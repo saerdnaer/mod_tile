@@ -166,7 +166,6 @@ int main(int argc, char **argv)
     int fd;
     struct sockaddr_un addr;
     int ret=0;
-    int z;
     char name[PATH_MAX];
     struct timeval start, end;
     struct timeval start_all, end_all;
@@ -202,19 +201,23 @@ int main(int argc, char **argv)
 
     gettimeofday(&start_all, NULL);
 
-    for (z=minZoom; z<=maxZoom; z++) {
+	struct protocol tile;
+	strcpy(tile.xmlname, XMLCONFIG_DEFAULT);
+	tile.level = NO_LEVELS;
+
+    for (tile.z=minZoom; tile.z<=maxZoom; tile.z++) {
         double px0 = boundx0;
         double py0 = boundy1;
         double px1 = boundx1;
         double py1 = boundy0;
-        gprj.fromLLtoPixel(px0, py0, z);
-        gprj.fromLLtoPixel(px1, py1, z);
+        gprj.fromLLtoPixel(px0, py0, tile.z);
+        gprj.fromLLtoPixel(px1, py1, tile.z);
 
-        int x, xmin, xmax;
+        int xmin, xmax;
         xmin = (int)(px0/256.0);
         xmax = (int)(px1/256.0);
 
-        int y, ymin, ymax;
+        int ymin, ymax;
         ymin = (int)(py0/256.0);
         ymax = (int)(py1/256.0);
 
@@ -224,17 +227,17 @@ int main(int argc, char **argv)
 //            continue;
 //        }
 
-        printf("\nZoom(%d) Now rendering %d tiles\n", z, num);
+        printf("\nZoom(%d) Now rendering %d tiles\n", tile.z, num);
         num_all += num;
         gettimeofday(&start, NULL);
 
-        for (x=xmin; x<=xmax; x++) {
-            for (y=ymin; y<=ymax; y++) {
+        for (tile.x=xmin; tile.x<=xmax; tile.x++) {
+            for (tile.y=ymin; tile.y<=ymax; tile.y++) {
                 struct stat s;
-                xyz_to_meta(name, sizeof(name), HASH_PATH, XMLCONFIG_DEFAULT, x, y, z);
+                xyz_to_meta(name, sizeof(name), HASH_PATH, &tile);
                 if (stat(name, &s) < 0) {
                 // File doesn't exist
-                    ret = process_loop(fd, x, y, z);
+                    ret = process_loop(fd, tile.x, tile.y, tile.z);
                 }
                 //printf(".");
                 fflush(NULL);

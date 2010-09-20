@@ -20,11 +20,14 @@ extern "C" {
 #define RENDER_SOCKET "/tmp/osm-renderd"
 #define XMLCONFIG_MAX 41
 
+#define NO_LEVELS INT_MAX
+
 enum protoCmd { cmdIgnore, cmdRender, cmdDirty, cmdDone, cmdNotDone, cmdRenderPrio, cmdRenderBulk };
 
 struct protocol {
     int ver;
     enum protoCmd cmd;
+    int level;
     int x;
     int y;
     int z;

@@ -56,28 +56,37 @@ int mkdirp(const char *path) {
 }
 
 
-
 /* File path hashing. Used by both mod_tile and render daemon
  * The two must both agree on the file layout for meta-tiling
  * to work
  */
 
-void xyz_to_path(char *path, size_t len, const char *tile_dir, const char *xmlconfig, int x, int y, int z)
+void xyz_to_path(char *path, size_t len, const char *tile_dir, struct protocol *tile)
 {
 #ifdef DIRECTORY_HASH
     // We attempt to cluster the tiles so that a 16x16 square of tiles will be in a single directory
     // Hash stores our 40 bit result of mixing the 20 bits of the x & y co-ordinates
     // 4 bits of x & y are used per byte of output
     unsigned char i, hash[5];
+    int x, y;
+    x = tile->x;
+    y = tile->y;
 
     for (i=0; i<5; i++) {
         hash[i] = ((x & 0x0f) << 4) | (y & 0x0f);
         x >>= 4;
         y >>= 4;
     }
-    snprintf(path, len, "%s/%s/%d/%u/%u/%u/%u/%u.png", tile_dir, xmlconfig, z, hash[4], hash[3], hash[2], hash[1], hash[0]);
+    if ( tile->level == NO_LEVELS )
+        snprintf(path, len, "%s/%s/%d/%u/%u/%u/%u/%u.png", tile_dir, tile->xmlname, tile->z, hash[4], hash[3], hash[2], hash[1], hash[0]);
+    else
+        snprintf(path, len, "%s/%s/%d/%u/%u/%u/%u/%u.%d.png", tile_dir, tile->xmlname, tile->z, hash[4], hash[3], hash[2], hash[1], hash[0], tile->level);
+
 #else
-    snprintf(path, len, TILE_PATH "/%s/%d/%d/%d.png", xmlconfig, z, x, y);
+    if ( tile->level == NO_LEVELS )
+        snprintf(path, len, TILE_PATH "/%s/%d/%d/%d.png", tile->xmlname, tile->z, tile->x, tile->y);
+    else
+        snprintf(path, len, TILE_PATH "/%s/%d/%d/%d.%d.png", tile->xmlname, tile->z, tile->x, tile->y, tile->level);
 #endif
     return;
 }
@@ -100,17 +109,20 @@ int check_xyz(int x, int y, int z)
     return oob;
 }
 
-
-int path_to_xyz(const char *path, char *xmlconfig, int *px, int *py, int *pz)
+int path_to_xyz(const char *path, struct protocol *tile)
 {
 #ifdef DIRECTORY_HASH
-    int i, n, hash[5], x, y, z;
+    int i, n, hash[5], x, y;
 
-    n = sscanf(path, HASH_PATH "/%40[^/]/%d/%d/%d/%d/%d/%d", xmlconfig, pz, &hash[0], &hash[1], &hash[2], &hash[3], &hash[4]);
-    if (n != 7) {
+    n = sscanf(path, HASH_PATH "/%40[^/]/%d/%d/%d/%d/%d/%d.%d", tile->xmlname, &tile->z, &hash[0], &hash[1], &hash[2], &hash[3], &hash[4], &tile->level);
+    if (n != 7 && n != 8) {
         fprintf(stderr, "Failed to parse tile path: %s\n", path);
         return 1;
     } else {
+        if (n == 7) {
+            tile->level = NO_LEVELS;
+        }
+
         x = y = 0;
         for (i=0; i<5; i++) {
             if (hash[i] < 0 || hash[i] > 255) {
@@ -122,28 +134,33 @@ int path_to_xyz(const char *path, char *xmlconfig, int *px, int *py, int *pz)
             x |= (hash[i] & 0xf0) >> 4;
             y |= (hash[i] & 0x0f);
         }
-        z = *pz;
-        *px = x;
-        *py = y;
-        return check_xyz(x, y, z);
+        tile->x = x;
+        tile->y = y;
+        return check_xyz(x, y, tile->z);
     }
 #else
     int n;
-    n = sscanf(path, TILE_PATH "/%40[^/]/%d/%d/%d", xmlconfig, pz, px, py);
-    if (n != 4) {
+    n = sscanf(path, TILE_PATH "/%40[^/]/%d/%d/%d.%d", tile->xmlname, tile->&z, tile->&x, tile->&y, tile->&level);
+    if (n != 4 && n != 5) {
         fprintf(stderr, "Failed to parse tile path: %s\n", path);
         return 1;
     } else {
-        return check_xyz(*px, *py, *pz);
+        if (n == 4) {
+            tile->level = NO_LEVELS;
+        }
+        return check_xyz(tile->x, tile->y, tile->z);
     }
 #endif
 }
-
+    
 #ifdef METATILE
 // Returns the path to the meta-tile and the offset within the meta-tile
-int xyz_to_meta(char *path, size_t len, const char *tile_dir, const char *xmlconfig, int x, int y, int z)
+int xyz_to_meta(char *path, size_t len, const char *tile_dir, struct protocol *tile)
 {
     unsigned char i, hash[5], offset, mask;
+    int x, y;
+    x = tile->x;
+    y = tile->y;
 
     // Each meta tile winds up in its own file, with several in each leaf directory
     // the .meta tile name is beasd on the sub-tile at (0,0)
@@ -158,9 +175,16 @@ int xyz_to_meta(char *path, size_t len, const char *tile_dir, const char *xmlcon
         y >>= 4;
     }
 #ifdef DIRECTORY_HASH
-    snprintf(path, len, "%s/%s/%d/%u/%u/%u/%u/%u.meta", tile_dir, xmlconfig, z, hash[4], hash[3], hash[2], hash[1], hash[0]);
+    if ( tile->level == NO_LEVELS )
+        snprintf(path, len, "%s/%s/%d/%u/%u/%u/%u/%u.meta", tile_dir, tile->xmlname, tile->z, hash[4], hash[3], hash[2], hash[1], hash[0]);
+    else
+        snprintf(path, len, "%s/%s/%d/%u/%u/%u/%u/%u.%d.meta", tile_dir, tile->xmlname, tile->z, hash[4], hash[3], hash[2], hash[1], hash[0], tile->level);
+
 #else
-    snprintf(path, len, "%s/%s/%d/%u/%u.meta", tile_dir, xmlconfig, z, x, y);
+    if ( tile->level == NO_LEVELS )
+        snprintf(path, len, "%s/%s/%d/%u/%u.meta", tile_dir, tile->xmlname, tile->z, x, y);
+    else
+        snprintf(path, len, "%s/%s/%d/%u/%u.%d.meta", tile_dir, tile->xmlname, tile->z, x, y, tile->level);
 #endif
     return offset;
 }
