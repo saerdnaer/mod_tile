@@ -1,3 +1,9 @@
+libapache2-mod-tile (0.3.level1) lucid; urgency=low
+
+  * added level attribute 
+
+ -- Andreas Hubel <hubel@nonetwork.informatik.tu-muenchen.de>  Mon, 20 Sep 2010 14:28:24 +0200
+
 libapache2-mod-tile (0.3) jaunty; urgency=low
 
   * new version of render_list with proper multithreading
