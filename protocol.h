@@ -7,7 +7,7 @@ extern "C" {
 
 /* Protocol between client and render daemon
  *
- * ver = 2;
+ * ver = 3;
  *
  * cmdRender(z,x,y,xmlconfig), response: {cmdDone(z,x,y), cmdBusy(z,x,y)}
  * cmdDirty(z,x,y,xmlconfig), no response
@@ -16,9 +16,11 @@ extern "C" {
  * causing responses to get slightly out of step with requests.
  */
 #define TILE_PATH_MAX (256)
-#define PROTO_VER (2)
+#define PROTO_VER (3)
 #define RENDER_SOCKET "/tmp/osm-renderd"
-#define XMLCONFIG_MAX 41
+#define XMLCONFIG_MAX 37
+
+#define NO_LEVELS INT_MAX
 
 #define NO_LEVELS INT_MAX
 
@@ -32,6 +34,7 @@ struct protocol {
     int y;
     int z;
     char xmlname[XMLCONFIG_MAX];
+    int level;
 };
 
 struct protocol_v1 {

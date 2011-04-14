@@ -1,4 +1,4 @@
-#ifndef MODTILE_H 
+#ifndef MODTILE_H
 #define MODTILE_H
 
 /*Size of the delaypool hashtable*/
@@ -58,7 +58,7 @@ typedef struct {
     char baseuri[PATH_MAX];
     int minzoom;
     int maxzoom;
-    bool levels;
+    char levels;
 } tile_config_rec;
 
 typedef struct {
